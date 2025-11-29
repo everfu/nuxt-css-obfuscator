@@ -1,0 +1,68 @@
+{
+  "name": "nuxt-css-obfuscator",
+  "version": "1.0.0",
+  "description": "A CSS obfuscator for Nuxt.js applications, inspired by next-css-obfuscator",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "nuxt-css-obfuscator": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "release": "bumpp && pnpm run build && pnpm publish",
+    "changelog": "changelogithub",
+    "prepublishOnly": "pnpm run build && pnpm run test:run"
+  },
+  "keywords": [
+    "nuxt",
+    "nuxt3",
+    "nuxt4",
+    "css",
+    "obfuscator",
+    "obfuscation",
+    "class-names",
+    "css-modules",
+    "security"
+  ],
+  "author": "everfu",
+  "license": "MIT",
+  "dependencies": {
+    "@nuxt/kit": "^3.13.0 || ^4.0.0",
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "css-tree": "^2.3.1",
+    "fast-glob": "^3.3.2",
+    "fs-extra": "^11.2.0"
+  },
+  "devDependencies": {
+    "@types/css-tree": "^2.3.8",
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.10.5",
+    "@vitest/coverage-v8": "^1.0.4",
+    "@vitest/ui": "^1.0.4",
+    "bumpp": "^9.7.1",
+    "changelogithub": "^0.13.10",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.6.1"
+  },
+  "peerDependencies": {
+    "nuxt": "^3.0.0 || ^4.0.0"
+  }
+}
