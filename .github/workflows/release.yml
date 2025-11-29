@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   release:
@@ -38,12 +39,57 @@ jobs:
       - name: Run tests
         run: pnpm run test:run
 
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          # 尝试使用 changelogithub 生成变更日志
+          if pnpm run changelog --from=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "HEAD~10") --to=${{ steps.version.outputs.version }} --output=RELEASE_NOTES.md 2>/dev/null; then
+            echo "Generated changelog with changelogithub"
+          else
+            # 如果失败，生成基本的 release notes
+            echo "# Release ${{ steps.version.outputs.version }}" > RELEASE_NOTES.md
+            echo "" >> RELEASE_NOTES.md
+            echo "## What's Changed" >> RELEASE_NOTES.md
+            echo "" >> RELEASE_NOTES.md
+            git log --pretty=format:"* %s (%h)" $(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "HEAD~10")..HEAD >> RELEASE_NOTES.md 2>/dev/null || echo "* Initial release" >> RELEASE_NOTES.md
+          fi
+
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          cat RELEASE_NOTES.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
       - name: Publish to npm
         run: pnpm publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
 
-      - name: Generate changelog
-        run: pnpm run changelog
+      - name: Update changelog in repository
+        run: |
+          pnpm run changelog
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .
+            git commit -m "docs: update changelog for ${{ steps.version.outputs.version }}"
+            git push origin HEAD:main
+          fi
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}

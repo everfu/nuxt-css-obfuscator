@@ -259,8 +259,11 @@ This will:
 2. Update `package.json` version
 3. Create git commit and tag
 4. Push to GitHub
-5. Trigger automatic npm publish
-6. Generate changelog using changelogithub
+5. Trigger GitHub Actions to automatically:
+   - Build and test the project
+   - Create GitHub Release with auto-generated Release Notes
+   - Publish to npm
+   - Update CHANGELOG.md in the repository using changelogithub
 
 ## 📝 License
 

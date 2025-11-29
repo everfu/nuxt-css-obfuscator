@@ -86,8 +86,11 @@ pnpm run release
 2. ✅ 更新 `package.json` 中的版本
 3. ✅ 创建 git commit 和 tag
 4. ✅ 推送到 GitHub
-5. ✅ 触发 GitHub Actions 自动发布到 npm
-6. ✅ 使用 changelogithub 生成变更日志
+5. ✅ 触发 GitHub Actions 自动：
+   - 构建和测试项目
+   - 创建 GitHub Release（包含自动生成的 Release Notes）
+   - 发布到 npm
+   - 使用 changelogithub 更新仓库中的 CHANGELOG.md
 
 ### 手动发布
 
