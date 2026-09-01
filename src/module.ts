@@ -1,4 +1,4 @@
-import { defineNuxtModule, addBuildPlugin, createResolver } from '@nuxt/kit';
+import { addVitePlugin, defineNuxtModule } from '@nuxt/kit';
 import type { Options } from './types';
 import { Obfuscator } from './core/obfuscator';
 import { mergeConfig, DEFAULT_OPTIONS } from './utils/config';
@@ -13,8 +13,7 @@ export default defineNuxtModule<Options>({
     },
   },
   defaults: DEFAULT_OPTIONS,
-  setup(options, nuxt) {
-    const resolver = createResolver(import.meta.url);
+  async setup(options, nuxt) {
     const config = mergeConfig(DEFAULT_OPTIONS, options);
 
     logger.setLevel(config.logLevel);
@@ -24,16 +23,44 @@ export default defineNuxtModule<Options>({
       return;
     }
 
-    // Hook into the build process
-    nuxt.hook('build:done', async () => {
-      logger.info('Running CSS obfuscation after build...');
-      
-      try {
-        const obfuscator = new Obfuscator(config);
+    if (nuxt.options.dev) {
+      logger.info('CSS obfuscation is skipped in development mode');
+      return;
+    }
+
+    const obfuscator = new Obfuscator(config, nuxt.options.rootDir, { executionMode: 'module' });
+    obfuscator.prepare();
+
+    if (config.enableMarkers) {
+      addVitePlugin({
+        name: 'nuxt-css-obfuscator-markers',
+        enforce: 'pre',
+        transform(code, id) {
+          if (!id.split('?', 1)[0].endsWith('.vue')) return;
+          const result = obfuscator.getFileProcessor().transformVueSourceWithMarkers(code, {
+            selector: (name) => config.markers.includes(name) ? name : obfuscator.getParser().ensureSelector(name),
+            ident: (name) => obfuscator.getParser().ensureIdent(name),
+          });
+          return result.changed ? { code: result.content, map: null } : undefined;
+        },
+      });
+    }
+
+    let ran = false;
+    nuxt.hook('nitro:init', (nitro) => {
+      nuxt.hook('nitro:build:public-assets', async () => {
+        obfuscator.setBuildFolderPath(nitro.options.output.publicDir);
+        logger.info('Running CSS obfuscation after Nitro copied public assets...');
+        const result = await obfuscator.obfuscate();
+        if (nitro.options.compressPublicAssets) obfuscator.refreshCompressedFiles(result.changedFiles);
+      });
+      nitro.hooks.hook('compiled', async () => {
+        if (ran) return;
+        ran = true;
+        obfuscator.setBuildFolderPath(nitro.options.output.serverDir);
+        logger.info('Running CSS obfuscation after Nitro compiled its server output...');
         await obfuscator.obfuscate();
-      } catch (error) {
-        logger.error('Failed to obfuscate CSS:', error);
-      }
+      });
     });
 
     logger.info('Nuxt CSS Obfuscator module initialized');

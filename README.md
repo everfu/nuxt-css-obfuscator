@@ -15,7 +15,9 @@ A CSS class name obfuscator for Nuxt.js applications, inspired by [next-css-obfu
 
 > **Warning**: This package is NOT guaranteed to work with every project. Test thoroughly before using in production.
 
-> **Note**: As a trade-off, obfuscation will make your CSS files larger.
+> **Note**: With the safe default `removeOriginalCss: false`, original rules are retained and obfuscated rules are appended, so CSS output is larger. Set it to `true` only after validating the complete production output.
+
+The Nuxt module transforms copied public assets before Nitro records their metadata, then transforms server output from Nitro's `compiled` hook. Each output directory is processed once. Any configuration, parsing, or consistency error fails the production build before transformed files are written.
 
 ## 📦 Installation
 
@@ -46,7 +48,7 @@ export default defineNuxtConfig({
 npm run build
 ```
 
-The obfuscation will run automatically after the build completes.
+The obfuscation runs automatically against Nitro's real public and server output directories. Existing precompressed public assets are regenerated after conversion.
 
 ### Method 2: Using CLI
 
@@ -58,7 +60,7 @@ module.exports = {
   enable: true,
   mode: 'random',
   refreshClassConversionJson: false,
-  allowExtensions: ['.vue', '.js', '.ts', '.jsx', '.tsx', '.html', '.mjs'],
+  allowExtensions: ['.vue', '.js', '.ts', '.jsx', '.tsx', '.html', '.mjs', '.cjs', '.xml', '.xsl'],
 };
 ```
 
@@ -105,9 +107,9 @@ npm run build
 | `enableMarkers` | `boolean` | `false` | Enable partial obfuscation with markers |
 | `markers` | `string[]` | `['nuxt-css-obfuscation']` | Marker class names |
 | `removeMarkersAfterObfuscated` | `boolean` | `true` | Remove markers after obfuscation |
-| `removeOriginalCss` | `boolean` | `false` | Remove original CSS if obfuscated |
-| `generatorSeed` | `number \| undefined` | `undefined` | Seed for random generator |
-| `enableJsAst` | `boolean` | `true` | Enable JavaScript AST parsing |
+| `removeOriginalCss` | `boolean` | `false` | `false` keeps original rules and appends obfuscated rules; `true` keeps only obfuscated rules after validation |
+| `generatorSeed` | `number \| undefined` | `undefined` | Stable seed for `random` and `simplify-seedable` generation |
+| `enableJsAst` | `boolean` | `true` | Parse script output structurally; when `false`, the build fails if script references still require replacement |
 | `logLevel` | `'silent' \| 'error' \| 'warn' \| 'info' \| 'debug'` | `'info'` | Log level |
 
 ## 🎯 Usage Examples
@@ -133,6 +135,7 @@ module.exports = {
   mode: 'random',
   enableMarkers: true,
   markers: ['nuxt-css-obfuscation'],
+  removeOriginalCss: false,
 };
 ```
 
@@ -153,6 +156,10 @@ Then in your Vue components:
   </div>
 </template>
 ```
+
+Marker mode is source-aware when used as a Nuxt module: static classes and statically analyzable `:class` expressions are converted only inside the marked subtree. `enableMarkers: true` cannot be combined with `removeOriginalCss: true`, because unmarked content still needs the original rules.
+
+The CLI supports marker mode only for static HTML, XML, and XSL output. Nuxt SSR or output containing scripts must use module mode so Vue source can be transformed before compilation.
 
 ## 💡 Tips
 
@@ -197,11 +204,16 @@ Options:
   -V, --version            Display version
 ```
 
+`--config` accepts TypeScript, ESM, and CommonJS files. A missing or invalid explicit config exits with a non-zero status. The config path, build directory, conversion directory, whitelist, and blacklist are resolved from `--dir` (the project root), not from the shell's current directory.
+
+When the CLI processes a complete Nitro output, it also regenerates existing `.gz`/`.br` files and updates Nitro's asset metadata. If any changed asset cannot be reconciled with that manifest, the command fails instead of leaving mismatched output.
+
 ## 🤔 How It Works
 
-1. **Extract CSS**: Parses CSS files from the build output
-2. **Obfuscate**: Generates obfuscated class names and saves mapping
-3. **Replace**: Searches and replaces class names in all build files
+1. **Collect**: Parse every eligible CSS file and restore any persistent conversion map
+2. **Stage**: Transform CSS, JavaScript, SSR HTML, XML, and XSL in memory using one class/ID/keyframe map
+3. **Validate**: Reparse and check staged output for unresolved structured references
+4. **Write**: Replace output files and save `conversion.json` only after validation succeeds
 
 Unlike PostCSS-Obfuscator which creates a separate folder, this package directly edits the build files to ensure compatibility with Nuxt.
 

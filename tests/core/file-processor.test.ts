@@ -207,5 +207,80 @@ describe('FileProcessor', () => {
       expect(result).toContain('x');
       expect(result).toContain('other-class');
     });
+
+    it('transforms Nuxt object classes, dynamic class objects, DOM APIs, IDs and SSR HTML', () => {
+      const source = [
+        'const vnode={class:"post-content",id:"hero",dynamic:{class:{active:ok,"foo-bar":yes}}};',
+        'el.classList.add("active");',
+        'document.querySelector(".post-content #hero");',
+        'const html="<main class=\\"post-content active\\" id=\\"hero\\"></main>";',
+      ].join('');
+      const result = processor.transformContent(
+        source,
+        join(testDir, 'output.mjs'),
+        { 'post-content': 'a', active: 'b', 'foo-bar': 'c' },
+        { hero: 'd' },
+      );
+
+      expect(result.changed).toBe(true);
+      expect(result.content).toContain('class:"a"');
+      expect(result.content).toContain('class:{"b":ok,"c":yes}');
+      expect(result.content).toContain('classList.add("b")');
+      expect(result.content).toContain('querySelector(".a #d")');
+      expect(result.content).toContain('class=\\"a b\\" id=\\"d\\"');
+    });
+
+    it('preserves ignored ranges even when earlier replacements change length', () => {
+      const custom = new FileProcessor({
+        ...DEFAULT_OPTIONS,
+        contentIgnoreRegexes: [/KEEP\([^)]*\)/g],
+      });
+      const source = 'const first={class:"long-class"};KEEP(class="long-class");const last={class:"long-class"}';
+      const result = custom.transformContent(source, join(testDir, 'output.js'), { 'long-class': 'x' }, {});
+
+      expect(result.content).toContain('first={class:"x"}');
+      expect(result.content).toContain('KEEP(class="long-class")');
+      expect(result.content).toContain('last={class:"x"}');
+    });
+
+    it('fails when JavaScript references require AST processing but it is disabled', () => {
+      const custom = new FileProcessor({ ...DEFAULT_OPTIONS, enableJsAst: false });
+      expect(() => custom.transformContent('const node={class:"card"}', join(testDir, 'output.js'), { card: 'a' }, {}))
+        .toThrow(/enableJsAst/);
+    });
+
+    it('transforms HTML/XML/XSL class, ID and fragment attributes', () => {
+      const source = '<div class="feed entry" id="atom"><a href="#atom"/></div>';
+      const result = processor.transformContent(source, join(testDir, 'atom.xsl'), { feed: 'a', entry: 'b' }, { atom: 'c' });
+      expect(result.content).toBe('<div class="a b" id="c"><a href="#c"/></div>');
+    });
+
+    it('transforms CSS embedded in Nuxt server JavaScript', () => {
+      const custom = new FileProcessor({ ...DEFAULT_OPTIONS, removeOriginalCss: true });
+      const source = 'const style="#hero.card{animation:pulse 1s}@keyframes pulse{from{opacity:0}}"';
+      const result = custom.transformContent(source, join(testDir, 'entry-styles.mjs'), { card: 'a' }, { hero: 'b', pulse: 'c' });
+      expect(result.content).toContain('#b.a{animation:c 1s}@keyframes c');
+      expect(result.content).not.toContain('#hero.card');
+    });
+
+    it('transforms only marked Vue subtrees including dynamic class expressions', () => {
+      const custom = new FileProcessor({
+        ...DEFAULT_OPTIONS,
+        enableMarkers: true,
+        markers: ['mark'],
+      });
+      const names: Record<string, string> = { panel: 'a', active: 'b', 'foo-bar': 'c', child: 'd' };
+      const source = '<template><div class="outside"><section class="mark panel" :class="{ active, \'foo-bar\': yes }"><span class="child">x</span></section></div></template>';
+      const result = custom.transformVueSourceWithMarkers(source, {
+        selector: (name) => names[name] || name,
+        ident: (name) => name,
+      });
+
+      expect(result.content).toContain('class="outside"');
+      expect(result.content).toContain('class="a"');
+      expect(result.content).toContain(":class=\"{ 'b': active, 'c': yes }\"");
+      expect(result.content).toContain('class="d"');
+      expect(result.content).not.toContain('mark');
+    });
   });
 });

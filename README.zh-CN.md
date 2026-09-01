@@ -15,7 +15,9 @@
 
 > **警告**：此包不保证适用于所有项目。在生产环境使用前请彻底测试。
 
-> **注意**：作为权衡，混淆会使您的 CSS 文件变大。
+> **注意**：安全默认值 `removeOriginalCss: false` 会保留原规则并追加混淆规则，因此 CSS 会变大。只有在完整验收生产产物后才建议设为 `true`。
+
+Nuxt 模块会在 Nitro 记录资源元数据前转换已复制的公共资源，再在 Nitro 的 `compiled` 阶段转换服务端产物；每个输出目录只处理一次。配置、解析或一致性验证失败都会直接终止生产构建，并且不会写入部分转换产物。
 
 ## 📦 安装
 
@@ -46,7 +48,7 @@ export default defineNuxtConfig({
 npm run build
 ```
 
-混淆将在构建完成后自动运行。
+混淆会直接处理 Nitro 的真实公共资源和服务端输出目录，并在转换后重新生成已有的预压缩资源。
 
 ### 方法 2：使用 CLI
 
@@ -58,7 +60,7 @@ module.exports = {
   enable: true,
   mode: 'random',
   refreshClassConversionJson: false,
-  allowExtensions: ['.vue', '.js', '.ts', '.jsx', '.tsx', '.html', '.mjs'],
+  allowExtensions: ['.vue', '.js', '.ts', '.jsx', '.tsx', '.html', '.mjs', '.cjs', '.xml', '.xsl'],
 };
 ```
 
@@ -105,9 +107,9 @@ npm run build
 | `enableMarkers` | `boolean` | `false` | 启用标记器的部分混淆 |
 | `markers` | `string[]` | `['nuxt-css-obfuscation']` | 标记器类名 |
 | `removeMarkersAfterObfuscated` | `boolean` | `true` | 混淆后移除标记器 |
-| `removeOriginalCss` | `boolean` | `false` | 如果已混淆则移除原始 CSS |
-| `generatorSeed` | `number \| undefined` | `undefined` | 随机生成器的种子 |
-| `enableJsAst` | `boolean` | `true` | 启用 JavaScript AST 解析 |
+| `removeOriginalCss` | `boolean` | `false` | `false` 保留原规则并追加混淆规则；`true` 在验证后只保留混淆规则 |
+| `generatorSeed` | `number \| undefined` | `undefined` | 为 `random` 和 `simplify-seedable` 提供稳定种子 |
+| `enableJsAst` | `boolean` | `true` | 结构化解析脚本；设为 `false` 时若脚本仍需替换则构建失败 |
 | `logLevel` | `'silent' \| 'error' \| 'warn' \| 'info' \| 'debug'` | `'info'` | 日志级别 |
 
 ## 🎯 使用示例
@@ -133,6 +135,7 @@ module.exports = {
   mode: 'random',
   enableMarkers: true,
   markers: ['nuxt-css-obfuscation'],
+  removeOriginalCss: false,
 };
 ```
 
@@ -153,6 +156,10 @@ module.exports = {
   </div>
 </template>
 ```
+
+在 Nuxt 模块模式中，标记器会在 Vue 源码编译前处理静态类和可静态分析的 `:class`，并且只转换标记子树。`enableMarkers: true` 不能与 `removeOriginalCss: true` 同时使用，因为未标记内容仍依赖原始 CSS。
+
+CLI 标记模式只支持结构可确定的静态 HTML、XML 和 XSL 产物。Nuxt SSR 或包含脚本的输出必须使用模块模式。
 
 ## 💡 提示
 
@@ -197,11 +204,16 @@ nuxt-css-obfuscator [选项]
   -V, --version            显示版本
 ```
 
+`--config` 支持 TypeScript、ESM 和 CommonJS。显式配置缺失或加载失败时会以非零状态退出。配置路径、构建目录、映射目录以及黑白名单中的相对路径都以 `--dir` 指定的项目根目录解析。
+
+CLI 处理完整 Nitro 产物时，还会重新生成已有的 `.gz`/`.br` 文件并更新 Nitro 静态资源元数据。若任一已转换资源无法与清单保持一致，命令会失败，不会留下元数据错配的产物。
+
 ## 🤔 工作原理
 
-1. **提取 CSS**：从构建输出中解析 CSS 文件
-2. **混淆**：生成混淆的类名并保存映射
-3. **替换**：在所有构建文件中搜索并替换类名
+1. **收集**：解析全部 CSS，并恢复已有转换映射
+2. **暂存**：使用同一份类名、ID 和关键帧映射在内存中转换 CSS、JavaScript、SSR HTML、XML 与 XSL
+3. **验证**：重新解析并检查暂存结果是否还有未转换的结构化引用
+4. **写入**：仅在验证通过后替换产物并保存 `conversion.json`
 
 与 PostCSS-Obfuscator 创建单独文件夹不同，此包直接编辑构建文件以确保与 Nuxt 的兼容性。
 

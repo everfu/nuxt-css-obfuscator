@@ -83,12 +83,21 @@ describe('ClassNameGenerator', () => {
   });
 
   describe('Simplify-Seedable Mode', () => {
-    it('should work like simplify mode', () => {
-      const generator = new ClassNameGenerator('simplify-seedable');
-      
-      expect(generator.generate()).toBe('a');
+    it('should be stable for the same seed and differ for another seed', () => {
+      const sequence = (seed: number) => {
+        const generator = new ClassNameGenerator('simplify-seedable', 5, seed);
+        return Array.from({ length: 8 }, () => generator.generate());
+      };
+
+      expect(sequence(42)).toEqual(sequence(42));
+      expect(sequence(42)).not.toEqual(sequence(43));
+    });
+
+    it('skips names reserved by a restored conversion map', () => {
+      const generator = new ClassNameGenerator('simplify', 5, 1);
+      generator.reserve(['a', 'c']);
       expect(generator.generate()).toBe('b');
-      expect(generator.generate()).toBe('c');
+      expect(generator.generate()).toBe('d');
     });
   });
 

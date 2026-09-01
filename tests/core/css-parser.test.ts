@@ -12,6 +12,7 @@ describe('CSSParser', () => {
       ...DEFAULT_OPTIONS,
       mode: 'simplify',
       generatorSeed: 12345,
+      removeOriginalCss: true,
     };
     parser = new CSSParser(options);
   });
@@ -84,10 +85,10 @@ describe('CSSParser', () => {
       `;
       const result = parser.parseCss(css);
       
-      // Note: css-tree may not automatically replace animation property values
-      // This is a known limitation - animation names in properties need separate handling
-      expect(result).toContain('@keyframes');
-      expect(result).not.toContain('.animated');
+      const animationName = parser.getIdentMap().slideIn;
+      expect(result).toContain(`@keyframes ${animationName}`);
+      expect(result).toContain(`animation:${animationName} 1s`);
+      expect(result).not.toContain('slideIn');
     });
   });
 
@@ -95,6 +96,7 @@ describe('CSSParser', () => {
     it('should ignore specified class names', () => {
       const customOptions: Required<Options> = {
         ...DEFAULT_OPTIONS,
+        removeOriginalCss: true,
         ignorePatterns: {
           selectors: ['container', /^btn-/],
           idents: [],
@@ -113,6 +115,7 @@ describe('CSSParser', () => {
     it('should ignore specified ID names', () => {
       const customOptions: Required<Options> = {
         ...DEFAULT_OPTIONS,
+        removeOriginalCss: true,
         ignorePatterns: {
           selectors: [],
           idents: ['app', /^main-/],
@@ -133,6 +136,7 @@ describe('CSSParser', () => {
     it('should add prefix to obfuscated selectors', () => {
       const customOptions: Required<Options> = {
         ...DEFAULT_OPTIONS,
+        removeOriginalCss: true,
         prefix: { selectors: 'x-', idents: '' },
         mode: 'simplify',
       };
@@ -147,6 +151,7 @@ describe('CSSParser', () => {
     it('should add suffix to obfuscated selectors', () => {
       const customOptions: Required<Options> = {
         ...DEFAULT_OPTIONS,
+        removeOriginalCss: true,
         suffix: { selectors: '-x', idents: '' },
         mode: 'simplify',
       };
@@ -165,6 +170,12 @@ describe('CSSParser', () => {
   });
 
   describe('Conversion Maps', () => {
+    it('does not generate a name that is already an original selector', () => {
+      const collisionParser = new CSSParser({ ...DEFAULT_OPTIONS, mode: 'simplify', removeOriginalCss: true });
+      collisionParser.parseCss('.long-name, .a { color: red; }');
+      expect(collisionParser.getSelectorMap()['long-name']).not.toBe('a');
+    });
+
     it('should return selector conversion map', () => {
       const css = '.header { color: blue; } .footer { color: green; }';
       parser.parseCss(css);
@@ -200,13 +211,9 @@ describe('CSSParser', () => {
   });
 
   describe('Error Handling', () => {
-    it('should handle invalid CSS gracefully', () => {
+    it('returns a string for recoverable CSS syntax', () => {
       const invalidCss = '.test { color: red';
-      const result = parser.parseCss(invalidCss);
-      
-      // css-tree may auto-fix some invalid CSS, so just check it doesn't throw
-      expect(result).toBeDefined();
-      expect(typeof result).toBe('string');
+      expect(parser.parseCss(invalidCss)).toEqual(expect.any(String));
     });
 
     it('should handle empty CSS', () => {
@@ -216,6 +223,14 @@ describe('CSSParser', () => {
   });
 
   describe('Complex CSS', () => {
+    it('stores escaped CSS identifiers using their runtime class spelling', () => {
+      parser.parseCss('.dark\\:bg-black.w-1\\/2 { color: red; }');
+      const map = parser.getSelectorMap();
+      expect(map).toHaveProperty('dark:bg-black');
+      expect(map).toHaveProperty('w-1/2');
+      expect(map).not.toHaveProperty('dark\\:bg-black');
+    });
+
     it('should handle media queries', () => {
       const css = `
         @media (max-width: 768px) {
@@ -242,6 +257,16 @@ describe('CSSParser', () => {
       
       expect(result).not.toContain('.text');
       expect(result).toContain('::before');
+    });
+  });
+
+  describe('Original CSS policy', () => {
+    it('keeps original rules and appends obfuscated rules by default', () => {
+      const css = '.container { color: red; }';
+      const result = new CSSParser({ ...DEFAULT_OPTIONS, mode: 'simplify' }).parseCss(css);
+
+      expect(result).toContain('.container { color: red; }');
+      expect(result).toContain('.a{color:red}');
     });
   });
 });

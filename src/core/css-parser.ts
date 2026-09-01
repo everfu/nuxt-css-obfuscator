@@ -1,116 +1,179 @@
 import * as csstree from 'css-tree';
 import type { ClassConversionMap, Options, PrefixSuffixOptions } from '../types';
 import { ClassNameGenerator } from '../utils/generator';
-import { logger } from '../utils/logger';
+
+const ANIMATION_KEYWORDS = new Set([
+  'none', 'initial', 'inherit', 'unset', 'revert', 'revert-layer',
+  'infinite', 'normal', 'reverse', 'alternate', 'alternate-reverse',
+  'forwards', 'backwards', 'both', 'running', 'paused', 'linear',
+  'ease', 'ease-in', 'ease-out', 'ease-in-out', 'step-start', 'step-end',
+]);
 
 export class CSSParser {
-  private options: Required<Options>;
-  private generator: ClassNameGenerator;
+  private selectorGenerator: ClassNameGenerator;
+  private identGenerator: ClassNameGenerator;
   private selectorMap: ClassConversionMap = {};
   private identMap: ClassConversionMap = {};
+  private activeSelectors = new Set<string>();
 
-  constructor(options: Required<Options>) {
-    this.options = options;
-    this.generator = new ClassNameGenerator(
-      options.mode,
-      options.classLength,
-      options.generatorSeed
-    );
+  constructor(private options: Required<Options>) {
+    this.selectorGenerator = new ClassNameGenerator(options.mode, options.classLength, options.generatorSeed);
+    this.identGenerator = new ClassNameGenerator(options.mode, options.classLength, options.generatorSeed === undefined ? undefined : options.generatorSeed + 1);
   }
 
   private shouldIgnore(name: string, patterns: Array<string | RegExp>): boolean {
-    return patterns.some(pattern => {
-      if (typeof pattern === 'string') {
-        return name === pattern;
-      }
+    return patterns.some((pattern) => {
+      if (typeof pattern === 'string') return name === pattern;
+      pattern.lastIndex = 0;
       return pattern.test(name);
     });
   }
 
-  private applyPrefixSuffix(name: string, prefix: PrefixSuffixOptions, suffix: PrefixSuffixOptions): string {
-    const prefixStr = prefix.selectors || '';
-    const suffixStr = suffix.selectors || '';
-    return `${prefixStr}${name}${suffixStr}`;
+  private decorate(name: string, kind: keyof PrefixSuffixOptions): string {
+    const prefix = (this.options.prefix as PrefixSuffixOptions)[kind] || '';
+    const suffix = (this.options.suffix as PrefixSuffixOptions)[kind] || '';
+    return `${prefix}${name}${suffix}`;
   }
 
-  private obfuscateClassName(className: string): string {
-    if (this.shouldIgnore(className, this.options.ignorePatterns.selectors || [])) {
-      return className;
-    }
-
-    if (this.selectorMap[className]) {
-      return this.selectorMap[className];
-    }
-
-    const obfuscated = this.applyPrefixSuffix(
-      this.generator.generate(),
-      this.options.prefix as PrefixSuffixOptions,
-      this.options.suffix as PrefixSuffixOptions
-    );
+  ensureSelector(className: string): string {
+    if (this.shouldIgnore(className, this.options.ignorePatterns.selectors || [])) return className;
+    if (this.selectorMap[className]) return this.selectorMap[className];
+    const obfuscated = this.decorate(this.selectorGenerator.generate(), 'selectors');
     this.selectorMap[className] = obfuscated;
     return obfuscated;
   }
 
-  private obfuscateIdent(ident: string): string {
-    if (this.shouldIgnore(ident, this.options.ignorePatterns.idents || [])) {
-      return ident;
-    }
-
-    if (this.identMap[ident]) {
-      return this.identMap[ident];
-    }
-
-    const prefix = (this.options.prefix as PrefixSuffixOptions).idents || '';
-    const suffix = (this.options.suffix as PrefixSuffixOptions).idents || '';
-    const obfuscated = `${prefix}${this.generator.generate()}${suffix}`;
+  ensureIdent(ident: string): string {
+    if (this.shouldIgnore(ident, this.options.ignorePatterns.idents || [])) return ident;
+    if (this.identMap[ident]) return this.identMap[ident];
+    const obfuscated = this.decorate(this.identGenerator.generate(), 'idents');
     this.identMap[ident] = obfuscated;
     return obfuscated;
   }
 
-  parseCss(css: string): string {
-    try {
-      const ast = csstree.parse(css);
-      
+  reserveCssNames(css: string): void {
+    const ast = csstree.parse(css);
+    const names = new Set<string>();
+    csstree.walk(ast, {
+      visit: 'ClassSelector',
+      enter: (node: any) => node.name && names.add(csstree.ident.decode(node.name)),
+    });
+    csstree.walk(ast, {
+      visit: 'IdSelector',
+      enter: (node: any) => node.name && names.add(csstree.ident.decode(node.name)),
+    });
+    csstree.walk(ast, {
+      visit: 'Atrule',
+      enter: (node: any) => {
+        if (node.name.toLowerCase() !== 'keyframes' || !node.prelude) return;
+        csstree.walk(node.prelude, {
+          visit: 'Identifier',
+          enter: (identNode: any) => identNode.name && names.add(identNode.name),
+        });
+      },
+    });
+    const restoredNames = new Set([...Object.values(this.selectorMap), ...Object.values(this.identMap)]);
+    for (const name of names) {
+      if (restoredNames.has(name) && this.selectorMap[name] !== name && this.identMap[name] !== name) {
+        throw new Error(`Persistent conversion map collides with current CSS name: ${name}`);
+      }
+    }
+    this.selectorGenerator.reserve(names);
+    this.identGenerator.reserve(names);
+  }
+
+  collectCss(css: string): void {
+    this.reserveCssNames(css);
+    const ast = csstree.parse(css);
+    if (!this.options.enableMarkers) {
       csstree.walk(ast, {
         visit: 'ClassSelector',
         enter: (node: any) => {
-          if (node.name) {
-            node.name = this.obfuscateClassName(node.name);
-          }
-        }
+          if (!node.name) return;
+          const name = csstree.ident.decode(node.name);
+          this.activeSelectors.add(name);
+          this.ensureSelector(name);
+        },
       });
-
       csstree.walk(ast, {
         visit: 'IdSelector',
-        enter: (node: any) => {
-          if (node.name) {
-            node.name = this.obfuscateIdent(node.name);
-          }
-        }
+        enter: (node: any) => node.name && this.ensureIdent(csstree.ident.decode(node.name)),
       });
-
-      // Handle animation names
+    } else {
       csstree.walk(ast, {
-        visit: 'Atrule',
+        visit: 'ClassSelector',
         enter: (node: any) => {
-          if (node.name === 'keyframes' && node.prelude) {
-            csstree.walk(node.prelude, {
-              visit: 'Identifier',
-              enter: (identNode: any) => {
-                if (identNode.name) {
-                  identNode.name = this.obfuscateIdent(identNode.name);
-                }
-              }
-            });
-          }
-        }
+          if (!node.name) return;
+          const name = csstree.ident.decode(node.name);
+          if (this.selectorMap[name]) this.activeSelectors.add(name);
+        },
       });
-
-      return csstree.generate(ast);
-    } catch (error) {
-      logger.error('Failed to parse CSS:', error);
-      return css;
     }
+    csstree.walk(ast, {
+      visit: 'Atrule',
+      enter: (node: any) => {
+        if (node.name.toLowerCase() !== 'keyframes' || !node.prelude) return;
+        csstree.walk(node.prelude, {
+          visit: 'Identifier',
+          enter: (identNode: any) => identNode.name && this.ensureIdent(identNode.name),
+        });
+      },
+    });
+  }
+
+  private transformAst(ast: any): void {
+    csstree.walk(ast, {
+      visit: 'ClassSelector',
+      enter: (node: any) => {
+        const mapped = this.selectorMap[csstree.ident.decode(node.name)];
+        if (mapped) node.name = csstree.ident.encode(mapped);
+      },
+    });
+    csstree.walk(ast, {
+      visit: 'IdSelector',
+      enter: (node: any) => {
+        const mapped = this.identMap[csstree.ident.decode(node.name)];
+        if (mapped) node.name = csstree.ident.encode(mapped);
+      },
+    });
+    csstree.walk(ast, {
+      visit: 'Atrule',
+      enter: (node: any) => {
+        if (node.name.toLowerCase() !== 'keyframes' || !node.prelude) return;
+        csstree.walk(node.prelude, {
+          visit: 'Identifier',
+          enter: (identNode: any) => {
+            const mapped = this.identMap[identNode.name];
+            if (mapped) identNode.name = mapped;
+          },
+        });
+      },
+    });
+    csstree.walk(ast, {
+      visit: 'Declaration',
+      enter: (node: any) => {
+        const property = String(node.property || '').toLowerCase();
+        if (property !== 'animation' && property !== 'animation-name') return;
+        csstree.walk(node.value, {
+          visit: 'Identifier',
+          enter: (identNode: any) => {
+            if (ANIMATION_KEYWORDS.has(identNode.name.toLowerCase())) return;
+            const mapped = this.identMap[identNode.name];
+            if (mapped) identNode.name = mapped;
+          },
+        });
+      },
+    });
+  }
+
+  parseCss(css: string): string {
+    if (!css) return css;
+    this.collectCss(css);
+    const ast = csstree.parse(css);
+    this.transformAst(ast);
+    const transformed = csstree.generate(ast);
+    if (transformed === css) return css;
+    return this.options.removeOriginalCss ? transformed : `${css}\n${transformed}`;
   }
 
   getSelectorMap(): ClassConversionMap {
@@ -121,8 +184,15 @@ export class CSSParser {
     return { ...this.identMap };
   }
 
-  loadMaps(selectorMap: ClassConversionMap, identMap: ClassConversionMap) {
+  getActiveSelectorNames(): string[] {
+    return [...this.activeSelectors];
+  }
+
+  loadMaps(selectorMap: ClassConversionMap = {}, identMap: ClassConversionMap = {}): void {
     this.selectorMap = { ...selectorMap };
     this.identMap = { ...identMap };
+    const reserved = [...Object.values(selectorMap), ...Object.values(identMap)];
+    this.selectorGenerator.reserve(reserved);
+    this.identGenerator.reserve(reserved);
   }
 }

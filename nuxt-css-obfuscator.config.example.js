@@ -36,7 +36,7 @@ module.exports = {
   },
 
   // File extensions to process
-  allowExtensions: ['.vue', '.js', '.ts', '.jsx', '.tsx', '.html', '.mjs'],
+  allowExtensions: ['.vue', '.js', '.ts', '.jsx', '.tsx', '.html', '.mjs', '.cjs', '.xml', '.xsl'],
 
   // Regex patterns to ignore in file content
   contentIgnoreRegexes: [],
@@ -56,13 +56,15 @@ module.exports = {
   // Remove markers after obfuscation
   removeMarkersAfterObfuscated: true,
 
-  // Remove original CSS if obfuscated version exists
+  // false: keep original rules and append obfuscated rules
+  // true: keep only obfuscated rules after consistency validation
+  // Marker mode requires false.
   removeOriginalCss: false,
 
   // Seed for random generator (undefined = random seed)
   generatorSeed: undefined,
 
-  // Enable JavaScript AST parsing (experimental)
+  // Enable structural JavaScript parsing. If disabled, script references fail the build.
   enableJsAst: true,
 
   // Log level: 'silent', 'error', 'warn', 'info', 'debug'
