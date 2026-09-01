@@ -2,13 +2,16 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { FileProcessor } from '../../src/core/file-processor';
 import type { Options, ClassConversionMap } from '../../src/types';
 import { DEFAULT_OPTIONS } from '../../src/utils/config';
-import { writeFileSync, unlinkSync, mkdirSync, rmdirSync, existsSync } from 'fs';
-import { join } from 'path';
+import { writeFileSync, readFileSync, unlinkSync, mkdirSync, rmdirSync, existsSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const currentDirectory = dirname(fileURLToPath(import.meta.url));
 
 describe('FileProcessor', () => {
   let processor: FileProcessor;
   let options: Required<Options>;
-  const testDir = join(__dirname, 'test-files');
+  const testDir = join(currentDirectory, 'test-files');
   const testFile = join(testDir, 'test.vue');
 
   beforeEach(() => {
@@ -65,7 +68,7 @@ describe('FileProcessor', () => {
       
       processor.processFile(testFile, conversionMap, {});
       
-      const result = require('fs').readFileSync(testFile, 'utf-8');
+      const result = readFileSync(testFile, 'utf-8');
       expect(result).toContain('className="a"');
       expect(result).toContain('className="b"');
       expect(result).not.toContain('className="container"');
@@ -83,7 +86,7 @@ describe('FileProcessor', () => {
       
       processor.processFile(testFile, conversionMap, {});
       
-      const result = require('fs').readFileSync(testFile, 'utf-8');
+      const result = readFileSync(testFile, 'utf-8');
       expect(result).toContain('class="x y"');
     });
 
@@ -98,7 +101,7 @@ describe('FileProcessor', () => {
       
       processor.processFile(testFile, conversionMap, {});
       
-      const result = require('fs').readFileSync(testFile, 'utf-8');
+      const result = readFileSync(testFile, 'utf-8');
       // The current implementation focuses on class/className attributes
       // Simple template literals without context may not be replaced
       expect(result).toBeDefined();
@@ -121,7 +124,7 @@ describe('FileProcessor', () => {
       
       customProcessor.processFile(testFile, conversionMap, {});
       
-      const result = require('fs').readFileSync(testFile, 'utf-8');
+      const result = readFileSync(testFile, 'utf-8');
       expect(result).not.toContain('nuxt-css-obfuscation');
       expect(result).toContain('class="a"');
     });
@@ -141,7 +144,7 @@ describe('FileProcessor', () => {
       
       customProcessor.processFile(testFile, conversionMap, {});
       
-      const result = require('fs').readFileSync(testFile, 'utf-8');
+      const result = readFileSync(testFile, 'utf-8');
       expect(result).toContain('nuxt-css-obfuscation');
     });
   });
@@ -189,7 +192,7 @@ describe('FileProcessor', () => {
       
       processor.processFile(testFile, conversionMap, {});
       
-      const result = require('fs').readFileSync(testFile, 'utf-8');
+      const result = readFileSync(testFile, 'utf-8');
       expect(result).toContain('class="a b c"');
     });
 
@@ -203,7 +206,7 @@ describe('FileProcessor', () => {
       
       processor.processFile(testFile, conversionMap, {});
       
-      const result = require('fs').readFileSync(testFile, 'utf-8');
+      const result = readFileSync(testFile, 'utf-8');
       expect(result).toContain('x');
       expect(result).toContain('other-class');
     });

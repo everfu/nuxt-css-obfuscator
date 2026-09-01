@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { readFileSync, rmSync } from 'fs';
-import { resolve } from 'path';
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import fg from 'fast-glob';
 
 const execute = promisify(execFile);
-const fixture = resolve(__dirname, '../fixtures/nuxt-app');
-const markerFixture = resolve(__dirname, '../fixtures/nuxt-marker');
+const currentDirectory = dirname(fileURLToPath(import.meta.url));
+const fixture = resolve(currentDirectory, '../fixtures/nuxt-app');
+const markerFixture = resolve(currentDirectory, '../fixtures/nuxt-marker');
 
 describe('Nuxt integration', () => {
   afterEach(() => {
@@ -20,9 +22,9 @@ describe('Nuxt integration', () => {
   });
 
   it('runs once after Nitro output exists and keeps CSS, client and SSR mappings synchronized', async () => {
-    const nuxt = resolve(__dirname, '../../node_modules/nuxt/bin/nuxt.mjs');
+    const nuxt = resolve(currentDirectory, '../../node_modules/nuxt/bin/nuxt.mjs');
     const { stdout, stderr } = await execute(process.execPath, [nuxt, 'build', fixture], {
-      cwd: resolve(__dirname, '../..'),
+      cwd: resolve(currentDirectory, '../..'),
       env: { ...process.env, NODE_ENV: 'production' },
       maxBuffer: 20 * 1024 * 1024,
       timeout: 120_000,
@@ -51,9 +53,9 @@ describe('Nuxt integration', () => {
   }, 120_000);
 
   it('pre-transforms only marked Vue subtrees and preserves original CSS for unmarked content', async () => {
-    const nuxt = resolve(__dirname, '../../node_modules/nuxt/bin/nuxt.mjs');
+    const nuxt = resolve(currentDirectory, '../../node_modules/nuxt/bin/nuxt.mjs');
     await execute(process.execPath, [nuxt, 'build', markerFixture], {
-      cwd: resolve(__dirname, '../..'),
+      cwd: resolve(currentDirectory, '../..'),
       env: { ...process.env, NODE_ENV: 'production' },
       maxBuffer: 20 * 1024 * 1024,
       timeout: 120_000,

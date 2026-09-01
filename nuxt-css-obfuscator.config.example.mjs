@@ -1,5 +1,5 @@
 /** @type {import('nuxt-css-obfuscator').Options} */
-module.exports = {
+export default {
   // Enable or disable the obfuscator
   enable: true,
 

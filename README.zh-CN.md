@@ -19,6 +19,22 @@
 
 Nuxt 模块会在 Nitro 记录资源元数据前转换已复制的公共资源，再在 Nitro 的 `compiled` 阶段转换服务端产物；每个输出目录只处理一次。配置、解析或一致性验证失败都会直接终止生产构建，并且不会写入部分转换产物。
 
+## 从 v1 迁移到 v2
+
+v2 仅发布 ESM。请将 CommonJS 导入改为 ESM：
+
+```typescript
+import cssObfuscator from 'nuxt-css-obfuscator';
+```
+
+仍在迁移的 CommonJS 应用可以使用动态导入：
+
+```javascript
+const { default: cssObfuscator } = await import('nuxt-css-obfuscator');
+```
+
+配置文件也必须使用 ESM 默认导出。请将 `.cjs` 配置重命名为 `.mjs` 或 `.ts`，并将 `module.exports = { ... }` 改为 `export default { ... }`。
+
 ## 📦 安装
 
 ```bash
@@ -52,11 +68,11 @@ npm run build
 
 ### 方法 2：使用 CLI
 
-1. 创建配置文件 `nuxt-css-obfuscator.config.js`：
+1. 创建配置文件 `nuxt-css-obfuscator.config.mjs`：
 
 ```javascript
 /** @type {import('nuxt-css-obfuscator').Options} */
-module.exports = {
+export default {
   enable: true,
   mode: 'random',
   refreshClassConversionJson: false,
@@ -117,8 +133,8 @@ npm run build
 ### 完全混淆
 
 ```javascript
-// nuxt-css-obfuscator.config.js
-module.exports = {
+// nuxt-css-obfuscator.config.mjs
+export default {
   enable: true,
   mode: 'random',
   refreshClassConversionJson: false,
@@ -129,8 +145,8 @@ module.exports = {
 ### 部分混淆
 
 ```javascript
-// nuxt-css-obfuscator.config.js
-module.exports = {
+// nuxt-css-obfuscator.config.mjs
+export default {
   enable: true,
   mode: 'random',
   enableMarkers: true,
@@ -168,7 +184,7 @@ CLI 标记模式只支持结构可确定的静态 HTML、XML 和 XSL 产物。Nu
 在开发环境中设置 `refreshClassConversionJson: true`，在生产环境中设置为 `false`：
 
 ```javascript
-module.exports = {
+export default {
   enable: process.env.NODE_ENV === 'production',
   refreshClassConversionJson: process.env.NODE_ENV !== 'production',
 };
@@ -204,7 +220,7 @@ nuxt-css-obfuscator [选项]
   -V, --version            显示版本
 ```
 
-`--config` 支持 TypeScript、ESM 和 CommonJS。显式配置缺失或加载失败时会以非零状态退出。配置路径、构建目录、映射目录以及黑白名单中的相对路径都以 `--dir` 指定的项目根目录解析。
+`--config` 支持使用 ESM 默认导出的 TypeScript、`.js` 和 `.mjs` 配置。`.cjs`、`module.exports`、显式配置缺失或加载失败时会以非零状态退出。配置路径、构建目录、映射目录以及黑白名单中的相对路径都以 `--dir` 指定的项目根目录解析。
 
 CLI 处理完整 Nitro 产物时，还会重新生成已有的 `.gz`/`.br` 文件并更新 Nitro 静态资源元数据。若任一已转换资源无法与清单保持一致，命令会失败，不会留下元数据错配的产物。
 

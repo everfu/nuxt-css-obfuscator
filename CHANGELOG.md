@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Note**: Starting from v1.0.0, this changelog is automatically generated using [changelogithub](https://github.com/antfu/changelogithub).
 
+## [2.0.0] - 2026-09-01
+
+### Changed
+
+- **Breaking:** The npm package now publishes ESM only. Use `import` or dynamic `import()` instead of `require()`.
+- **Breaking:** Configuration files must use an ESM default export from a `.ts`, `.js`, or `.mjs` file. `.cjs` and `module.exports` configs are rejected.
+- Added `"type": "module"` and changed the build to emit one ESM package and CLI entry.
+- Updated tests and GitHub workflows to use ESM-native imports and package inspection.
+- The CLI now reads its version from `package.json` instead of duplicating it in source.
+
+### Fixed
+
+- Removed the Vite CommonJS Node API deprecation warning emitted while loading the Vitest configuration.
+
+### Migration
+
+- Replace `const obfuscator = require('nuxt-css-obfuscator')` with `import obfuscator from 'nuxt-css-obfuscator'`.
+- Rename `.cjs` configs to `.mjs` or `.ts` and replace `module.exports` with `export default`.
+
 ## [1.0.0] - 2025-11-29
 
 ### Added

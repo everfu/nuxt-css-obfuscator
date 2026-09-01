@@ -124,7 +124,6 @@ describe('Config Utils', () => {
     it.each([
       ['config.ts', 'export default { mode: "simplify", generatorSeed: 7 }'],
       ['config.mjs', 'export default { mode: "simplify-seedable", generatorSeed: 8 }'],
-      ['config.cjs', 'module.exports = { mode: "simplify", generatorSeed: 9 }'],
       ['config.js', 'export default { mode: "simplify", generatorSeed: 10 }'],
     ])('loads %s through the explicit ESM-compatible loader', async (fileName, source) => {
       const directory = mkdtempSync(join(tmpdir(), 'nuxt-css-obfuscator-config-'));
@@ -134,6 +133,30 @@ describe('Config Utils', () => {
       const config = await loadConfig(directory, fileName);
       expect(config.mode).toMatch(/^simplify/);
       expect(config.generatorSeed).toBeGreaterThan(0);
+    });
+
+    it('rejects an explicit CommonJS config extension', async () => {
+      const directory = mkdtempSync(join(tmpdir(), 'nuxt-css-obfuscator-config-'));
+      temporaryDirectories.push(directory);
+      writeFileSync(join(directory, 'config.cjs'), 'module.exports = { mode: "simplify" }');
+
+      await expect(loadConfig(directory, 'config.cjs')).rejects.toThrow(/requires an ESM/);
+    });
+
+    it('rejects an automatically discovered CommonJS config', async () => {
+      const directory = mkdtempSync(join(tmpdir(), 'nuxt-css-obfuscator-config-'));
+      temporaryDirectories.push(directory);
+      writeFileSync(join(directory, 'nuxt-css-obfuscator.config.cjs'), 'module.exports = { mode: "simplify" }');
+
+      await expect(loadConfig(directory)).rejects.toThrow(/requires an ESM/);
+    });
+
+    it('rejects CommonJS syntax in a .js config', async () => {
+      const directory = mkdtempSync(join(tmpdir(), 'nuxt-css-obfuscator-config-'));
+      temporaryDirectories.push(directory);
+      writeFileSync(join(directory, 'config.js'), 'module.exports = { mode: "simplify" }');
+
+      await expect(loadConfig(directory, 'config.js')).rejects.toThrow(/module\.exports configs are not supported/);
     });
 
     it('fails for a missing explicit config instead of using defaults', async () => {

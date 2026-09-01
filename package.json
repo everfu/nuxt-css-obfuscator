@@ -1,18 +1,17 @@
 {
   "name": "nuxt-css-obfuscator",
-  "version": "1.1.1",
+  "version": "2.0.0",
+  "type": "module",
   "description": "A CSS obfuscator for Nuxt.js applications, inspired by next-css-obfuscator",
   "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "bin": {
-    "nuxt-css-obfuscator": "dist/cli.js"
+    "nuxt-css-obfuscator": "./dist/cli.js"
   },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "import": "./dist/index.js"
     }
   },
   "files": [
@@ -24,7 +23,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run --exclude tests/integration/**",
-    "test:integration": "vitest run tests/integration",
+    "test:integration": "pnpm build && vitest run tests/integration",
     "test:coverage": "vitest run --coverage --exclude tests/integration/**",
     "release": "bumpp && pnpm run build && pnpm publish",
     "changelog": "changelogithub",

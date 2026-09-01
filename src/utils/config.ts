@@ -1,5 +1,5 @@
 import { existsSync } from 'fs';
-import { resolve } from 'path';
+import { extname, resolve } from 'path';
 import { createJiti } from 'jiti';
 import type { Options, PrefixSuffixOptions } from '../types';
 
@@ -29,6 +29,16 @@ const DEFAULT_OPTIONS: Required<Options> = {
   logLevel: 'info',
 };
 
+const ESM_CONFIG_EXTENSIONS = new Set(['.ts', '.js', '.mjs']);
+const LEGACY_CJS_CONFIG = 'nuxt-css-obfuscator.config.cjs';
+
+function assertEsmConfigPath(configFile: string): void {
+  const extension = extname(configFile).toLowerCase();
+  if (!ESM_CONFIG_EXTENSIONS.has(extension)) {
+    throw new Error(`Unsupported config format "${extension || '(none)'}": nuxt-css-obfuscator v2 requires an ESM .ts, .js, or .mjs config with a default export.`);
+  }
+}
+
 function normalizePrefixSuffix(value: string | PrefixSuffixOptions | undefined): PrefixSuffixOptions {
   if (typeof value === 'string') {
     return { selectors: value, idents: value };
@@ -56,17 +66,29 @@ export async function loadConfig(rootDir: string, explicitPath?: string): Promis
   const configFiles = [
     'nuxt-css-obfuscator.config.ts',
     'nuxt-css-obfuscator.config.js',
-    'nuxt-css-obfuscator.config.cjs',
     'nuxt-css-obfuscator.config.mjs',
   ];
+
+  if (explicitPath) {
+    assertEsmConfigPath(explicitPath);
+  } else if (existsSync(resolve(rootDir, LEGACY_CJS_CONFIG))) {
+    throw new Error(`Unsupported config file ${LEGACY_CJS_CONFIG}: nuxt-css-obfuscator v2 requires an ESM .ts, .js, or .mjs config with a default export.`);
+  }
 
   const candidates = explicitPath ? [explicitPath] : configFiles;
   for (const configFile of candidates) {
     const configPath = resolve(rootDir, configFile);
     if (existsSync(configPath)) {
       try {
-        const jiti = createJiti(import.meta.url, { interopDefault: true });
-        const userConfig = await jiti.import(configPath, { default: true }) as Options;
+        const jiti = createJiti(import.meta.url, { interopDefault: false });
+        const configModule = await jiti.import(configPath) as { default?: Options; 'module.exports'?: unknown };
+        if ('module.exports' in configModule) {
+          throw new Error('CommonJS module.exports configs are not supported in nuxt-css-obfuscator v2. Use an ESM default export.');
+        }
+        if (!('default' in configModule)) {
+          throw new Error('Config must use an ESM default export.');
+        }
+        const userConfig = configModule.default;
         return validateConfig(mergeConfig(DEFAULT_OPTIONS, userConfig || {}));
       } catch (error) {
         throw new Error(`Failed to load config from ${configPath}: ${String(error)}`);

@@ -1,4 +1,4 @@
-import cssObfuscator from '../../../src/module';
+import cssObfuscator from 'nuxt-css-obfuscator';
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
