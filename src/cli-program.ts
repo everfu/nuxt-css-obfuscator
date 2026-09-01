@@ -8,7 +8,7 @@ export function createCliProgram(): Command {
   return new Command()
     .name('nuxt-css-obfuscator')
     .description('Obfuscate CSS class names in Nuxt.js build output')
-    .version('1.1.0')
+    .version('1.1.1')
     .option('-c, --config <path>', 'Path to config file')
     .option('-d, --dir <path>', 'Project directory', process.cwd())
     .option('--build-dir <path>', 'Build directory (overrides config)')

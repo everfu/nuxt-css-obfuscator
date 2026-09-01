@@ -91,7 +91,7 @@ export class Obfuscator {
       absolute: true,
       onlyFiles: true,
     });
-    return files.filter((file) => this.fileProcessor.isPathAllowed(file)).sort();
+    return files.map((file) => resolve(file)).filter((file) => this.fileProcessor.isPathAllowed(file)).sort();
   }
 
   private async findBuildFiles(): Promise<string[]> {
@@ -104,7 +104,7 @@ export class Obfuscator {
       absolute: true,
       onlyFiles: true,
     });
-    return files.filter((file) => this.fileProcessor.shouldProcessFile(file)).sort();
+    return files.map((file) => resolve(file)).filter((file) => this.fileProcessor.shouldProcessFile(file)).sort();
   }
 
   private validate(staged: StagedFile[], conversionData: ConversionData): void {
@@ -170,7 +170,9 @@ export class Obfuscator {
       if (existsSync(`${file.path}.br`)) assetFiles.push({ path: `${file.path}.br`, content: brotliCompressSync(bytes) });
     }
 
-    const manifestPaths = (await fg('**/nitro/*.mjs', { cwd: serverRoot, absolute: true, onlyFiles: true })).sort();
+    const manifestPaths = (await fg('**/nitro/*.mjs', { cwd: serverRoot, absolute: true, onlyFiles: true }))
+      .map((file) => resolve(file))
+      .sort();
     if (manifestPaths.length === 0) {
       throw new Error(`Consistency validation failed: Nitro server output exists but its asset manifest was not found in ${serverRoot}`);
     }
